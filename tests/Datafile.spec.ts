@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { goToDatafile, login } from './helpers/auth';
 
 
 test('verify api response',async({ page}) => {
@@ -17,8 +16,12 @@ test('verify api response',async({ page}) => {
 })
 
 test('should load datafile',async ({ page }) => {  
-    await login(page);
-    await goToDatafile(page);
+    // Global setup has already authenticated - just navigate to the app
+    await page.goto('/');
+    // Navigate to Datafile using the button
+    await page.getByRole('button', { name: 'Datafile' }).click();
+    await expect(page.getByRole('heading', { name: 'Employee Directory' })).toBeVisible();
+    
     await expect(page.getByPlaceholder('Search...')).toBeVisible();
     await expect(page.getByText('Leanne Graham')).toBeVisible();
     await page.getByPlaceholder('Search...').fill('Leanne');
@@ -26,3 +29,34 @@ test('should load datafile',async ({ page }) => {
     await page.getByPlaceholder('Search...').fill('sincere@april.biz');
     await expect(page.getByText('Leanne Graham')).toBeVisible();
 })
+
+
+test("mocks a fruit and doesn't call api", async ({ page }) => {
+  // Mock the api call before navigating
+  await page.route('*/**/api/v1/fruits', async route => {
+    const json = [{ name: 'Strawberry', id: 21 }];
+    await route.fulfill({ json });
+  });
+  // Go to the page
+  await page.goto('https://demo.playwright.dev/api-mocking', { waitUntil: 'networkidle' });
+  await page.waitForLoadState('networkidle');
+  // Assert that the Strawberry fruit is visible
+  await expect(page.getByText('Strawberry')).toBeVisible({ timeout: 10000 });
+});
+
+test('gets the json from api and adds a new fruit', async ({ page }) => {
+  // Get the response and add to it
+  await page.route('*/**/api/v1/fruits', async route => {
+    const response = await route.fetch();
+    const json = await response.json();
+    json.push({ name: 'Loquat', id: 100 });
+    // Fulfill using the original response, while patching the response body
+    // with the given JSON object.
+    await route.fulfill({ response, json });
+  });
+  // Go to the page
+  await page.goto('https://demo.playwright.dev/api-mocking', { waitUntil: 'networkidle' });
+  await page.waitForLoadState('networkidle');
+  // Assert that the new fruit is visible
+  await expect(page.getByText('Loquat', { exact: true })).toBeVisible();
+});
